@@ -567,6 +567,9 @@
         <span class="icon">🎄</span>
         最小唯一數遊戲
       </h1>
+      <div class="subtitle">
+        聖誕派對小遊戲：<strong>每輪選一個數字</strong>，選到「最小且只有你選」的數字就贏了！
+      </div>
     </header>
 
     <!-- 數據儀表板 -->
@@ -614,15 +617,27 @@
       
       <!-- 下排：主要動作 -->
       <div class="control-row" style="border-top: 1px solid var(--card-border); padding-top: 16px; justify-content: flex-end;">
+        <!-- 開始統計 -->
+        <button class="btn btn-secondary" id="btnSettleRound" disabled style="min-width: 160px;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path d="M4 4h16v4H4zM4 10h10v4H4zM4 16h7v4H4z"/>
+          </svg>
+          開始統計
+        </button>
+      
+        <!-- 開始下一輪 / 開始遊戲 -->
         <button class="btn btn-primary" id="btnNextRound" disabled style="min-width: 210px; padding: 10px 24px; font-size: 15px;">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
           開始下一輪 / 開始遊戲
         </button>
+      
+        <!-- 重置遊戲 -->
         <button class="btn btn-danger" id="btnResetGame" disabled>
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           重置遊戲
         </button>
       </div>
+      
     </div>
 
     <!-- 內容區塊 -->
@@ -711,6 +726,9 @@
     const playerCountInput = document.getElementById('playerCountInput');
     const btnSetCount = document.getElementById('btnSetCount');
 
+    // ⭐ 新增：開始統計按鈕
+    const btnSettleRound = document.getElementById('btnSettleRound');
+
     // Logic Variables
     let lastState = null;
     let isAdmin = false;
@@ -769,6 +787,17 @@
     btnNextRound.addEventListener('click', () => {
       if (!isAdmin) return;
       socket.emit('startNextRound');
+    });
+
+    // ⭐ 新增：主控決定「開始統計」
+    btnSettleRound.addEventListener('click', () => {
+      if (!isAdmin) return;
+      if (!lastState || !lastState.roundActive) return;
+
+      const ok = confirm('確定要開始統計嗎？\n\n開始統計後，本輪將停止接收玩家新的選擇，並立刻結算結果。');
+      if (!ok) return;
+
+      socket.emit('settleRound');
     });
 
     btnResetGame.addEventListener('click', () => {
@@ -947,6 +976,7 @@
     }
 
     function updateButtons() {
+      // 玩家人數只能在遊戲尚未開始時設定
       if (lastState && lastState.round === 0) {
         btnSetCount.disabled = false;
         playerCountInput.disabled = false;
@@ -957,15 +987,45 @@
         playerCountInput.parentNode.style.opacity = '0.5';
       }
 
+      // 未登入管理者 → 全部控制鍵鎖住
       if (!isAdmin) {
         btnNextRound.disabled = true;
         btnResetGame.disabled = true;
+        if (btnSettleRound) btnSettleRound.disabled = true;
         return;
       }
 
-      btnNextRound.disabled = false;
+      // 已登入管理者
       btnResetGame.disabled = false;
+
+      if (!lastState) {
+        btnNextRound.disabled = true;
+        if (btnSettleRound) btnSettleRound.disabled = true;
+        return;
+      }
+
+      // 狀態解讀：
+      // round === 0       → 還沒開始任何一輪
+      // roundActive=true  → 這一輪正在進行中（可選數字）
+      // roundActive=false → 這一輪尚未開始或已結算
+
+      if (lastState.round === 0) {
+        // 還沒開始：可以按「開始遊戲」，不能統計
+        btnNextRound.disabled = false;
+        if (btnSettleRound) btnSettleRound.disabled = true;
+      } else {
+        if (lastState.roundActive) {
+          // 正在進行中：可以「開始統計」、暫時不能「下一輪」
+          if (btnSettleRound) btnSettleRound.disabled = false;
+          btnNextRound.disabled = true;
+        } else {
+          // 已結算或暫停：可以「開始下一輪」，不能再統計
+          if (btnSettleRound) btnSettleRound.disabled = true;
+          btnNextRound.disabled = false;
+        }
+      }
     }
+
 
     // 播放背景音樂
     let player;

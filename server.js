@@ -141,18 +141,10 @@ io.on('connection', (socket) => {
     p.choice = number;
     console.log(`Player ${p.id} chose ${number}`);
 
+    // 只更新狀態，不自動結算，等待主控按「開始統計」
     sendState();
-
-    // 檢查：所有「尚未淘汰、目前在線、已完成暱稱」的玩家都選好了嗎？
-    const activePlayers = getActivePlayers();
-    const allChosen =
-      activePlayers.length > 0 &&
-      activePlayers.every(pl => pl.choice !== null);
-
-    if (allChosen && !gameLocked) {
-      settleRound();
-    }
   });
+
 
   // 主控請求「開始下一輪」
   socket.on('startNextRound', () => {
@@ -162,6 +154,16 @@ io.on('connection', (socket) => {
     }
     console.log('startNextRound requested from admin:', socket.id);
     startNextRound();
+  });
+
+  // ⭐ 主控決定「開始統計」（結算本輪）
+  socket.on('settleRound', () => {
+    if (socket.id !== adminSocketId) {
+      console.log('Non-admin tried to settle round:', socket.id);
+      return;
+    }
+    console.log('settleRound requested from admin:', socket.id);
+    settleRound();
   });
 
   // 主控重置遊戲
@@ -288,8 +290,20 @@ function startNextRound() {
   io.emit('newRound', { round });
 }
 
-// 重置整個遊戲（清空玩家、紀錄，但保留 admin 登入狀態）
+// 重置整個遊戲（清空玩家、紀錄，並斷線所有非主控連線）
 function resetGame() {
+  console.log('*** Game has been reset by admin ***');
+
+  // 先廣播給前端：遊戲已重置
+  io.emit('gameReset');
+
+  // 把所有「非主控」的 socket 全部踢下線
+  for (const [socketId, socket] of io.sockets.sockets) {
+    if (socketId === adminSocketId) continue; // 保留主控
+    socket.disconnect(true);
+  }
+
+  // 清空所有伺服器端的遊戲資料
   players = {};
   socketToClientId = {};
   maxPlayers = null;
@@ -299,10 +313,8 @@ function resetGame() {
   choicesVisible = false;
   history = [];
 
-  console.log('*** Game has been reset ***');
-
+  // 重新送一次狀態（此時大概只剩主控在聽）
   sendState();
-  io.emit('gameReset');
 }
 
 // 廣播目前狀態
