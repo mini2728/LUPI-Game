@@ -538,8 +538,8 @@
       position: fixed;
       bottom: 10px;
       right: 10px;
-      width: 200px;   /* 要遵守 YouTube 條款就不要設太小 */
-      height: 113px;  /* 16:9 比例 */
+      width: 1px;   /* 要遵守 YouTube 條款就不要設太小 */
+      height: 1px;  /* 16:9 比例 */
       z-index: 9999;
     }
 
@@ -605,7 +605,7 @@
             <input type="number" id="playerCountInput" min="1" placeholder="32" />
             <button class="btn btn-secondary btn-sm" id="btnSetCount">設定</button>
           </div>
-          <button id="bg-music-btn">播放背景音樂</button>
+          <button id="bg-music-btn" class="btn btn-secondary btn-sm">播放背景音樂</button>
 
           <div id="player-wrapper" style="display: none;">
             <div id="player"></div>
@@ -972,37 +972,46 @@
     let player;
     let hasPlayed = false;
 
+    // 你的聖誕歌清單
+    const playlist = [
+      'fyEAX7Cd3OE',  // Bobby Helms - Jingle Bell Rock
+      'LUjn3RpkcKY',  // Justin Bieber - Mistletoe
+      'yXQViqx6GMY',  // Mariah Carey - All I Want For Christmas Is You
+      '_2p2pFUoS5c',  // Ariana Grande – Santa Tell Me
+      'YcEyf7z16X4',  // The Jackson 5 - Santa Claus Is Coming To Town
+      'N8NcQzMQN_U'   // José Feliciano - Feliz Navidad
+    ];
+    let currentIndex = 0;
+
     // 2. API 載入後會自動呼叫這個函數
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         height: '113',
         width: '200',
-        videoId: 'fyEAX7Cd3OE', // 例如 'dQw4w9WgXcQ'
+        videoId: playlist[currentIndex], // 從清單第一首開始
         playerVars: {
-          autoplay: 0,      // 先不要自動播
+          autoplay: 0,      // 不自動播放，等使用者按按鈕
           controls: 0,      // 不顯示控制列
           rel: 0,
           modestbranding: 1
         },
         events: {
-          onReady: onPlayerReady
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange
         }
       });
     }
 
-    // 3. 玩家準備好後，綁定按鈕事件
+    // 3. 玩家準備好後，綁定按鈕事件（負責 播放/暫停）
     function onPlayerReady() {
       const btn = document.getElementById('bg-music-btn');
-      btn.addEventListener('click', function () {
-        // 第一次點擊：顯示播放器並播放
-        document.getElementById('player-wrapper').style.display = 'block';
-        player.playVideo();
-        hasPlayed = true;
-        btn.textContent = '暫停背景音樂';
-      });
+      const wrapper = document.getElementById('player-wrapper');
 
       btn.addEventListener('click', function () {
-        if (!hasPlayed) return; // 保險
+        // 第一次點擊時把播放器顯示出來（之後就保持顯示）
+        if (wrapper.style.display === 'none' || wrapper.style.display === '') {
+          wrapper.style.display = 'block';
+        }
 
         const state = player.getPlayerState();
         if (state === YT.PlayerState.PLAYING) {
@@ -1013,6 +1022,16 @@
           btn.textContent = '暫停背景音樂';
         }
       });
+    }
+
+    // 4. 監聽 YouTube 播放狀態，結束就播下一首
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.ENDED) {
+        // 換下一首，最後一首後再回到第一首
+        currentIndex = (currentIndex + 1) % playlist.length;
+        player.loadVideoById(playlist[currentIndex]);
+        player.playVideo();
+      }
     }
 </script>
 </body>
