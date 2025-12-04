@@ -532,6 +532,22 @@
       body { padding: 12px; }
       .card { max-height: none; }
     }
+
+    /* 把播放器縮小放在角落，減少干擾 */
+    #player-wrapper {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      width: 200px;   /* 要遵守 YouTube 條款就不要設太小 */
+      height: 113px;  /* 16:9 比例 */
+      z-index: 9999;
+    }
+
+    #bg-music-btn {
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -580,14 +596,19 @@
       <div class="control-row">
         <div style="display: flex; gap: 12px; flex-wrap: wrap;">
           <div class="input-group">
+            <span>管理密碼</span>
+            <input type="password" id="adminPwd" />
+            <button class="btn btn-secondary btn-sm" id="btnAdminLogin">登入</button>
+          </div>
+          <div class="input-group">
             <span>玩家人數</span>
             <input type="number" id="playerCountInput" min="1" placeholder="32" />
             <button class="btn btn-secondary btn-sm" id="btnSetCount">設定</button>
           </div>
-          <div class="input-group">
-            <span>管理密碼</span>
-            <input type="password" id="adminPwd" placeholder="1234" />
-            <button class="btn btn-secondary btn-sm" id="btnAdminLogin">登入</button>
+          <button id="bg-music-btn">播放背景音樂</button>
+
+          <div id="player-wrapper" style="display: none;">
+            <div id="player"></div>
           </div>
         </div>
       </div>
@@ -669,7 +690,8 @@
 <div id="summaryPlayers" style="display: none;"></div>
 <div id="summaryActive" style="display: none;"></div>
 <div id="summaryState" style="display: none;"></div>
-
+<!-- 1. 載入 YouTube iframe API -->
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
     const socket = io();
     
@@ -944,6 +966,53 @@
 
       btnNextRound.disabled = false;
       btnResetGame.disabled = false;
+    }
+
+    // 播放背景音樂
+    let player;
+    let hasPlayed = false;
+
+    // 2. API 載入後會自動呼叫這個函數
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        height: '113',
+        width: '200',
+        videoId: 'fyEAX7Cd3OE', // 例如 'dQw4w9WgXcQ'
+        playerVars: {
+          autoplay: 0,      // 先不要自動播
+          controls: 0,      // 不顯示控制列
+          rel: 0,
+          modestbranding: 1
+        },
+        events: {
+          onReady: onPlayerReady
+        }
+      });
+    }
+
+    // 3. 玩家準備好後，綁定按鈕事件
+    function onPlayerReady() {
+      const btn = document.getElementById('bg-music-btn');
+      btn.addEventListener('click', function () {
+        // 第一次點擊：顯示播放器並播放
+        document.getElementById('player-wrapper').style.display = 'block';
+        player.playVideo();
+        hasPlayed = true;
+        btn.textContent = '暫停背景音樂';
+      });
+
+      btn.addEventListener('click', function () {
+        if (!hasPlayed) return; // 保險
+
+        const state = player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+          player.pauseVideo();
+          btn.textContent = '播放背景音樂';
+        } else {
+          player.playVideo();
+          btn.textContent = '暫停背景音樂';
+        }
+      });
     }
 </script>
 </body>

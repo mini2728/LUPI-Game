@@ -10,13 +10,15 @@ const io = new Server(server);
 const PORT = 3000;
 const MIN_NUMBER = 1;
 const MAX_NUMBER = 32;
-const ADMIN_PASSWORD = '1234'; // 主控密碼，可改
+const ADMIN_PASSWORD = '53206993'; // 主控密碼，可改
 
 app.use(express.static('public'));
 
 // 狀態
-// players: { socketId: { id, name, hasName, choice, eliminated } }
+// players: { clientId: { id, name, hasName, choice, eliminated, connected } }
+// socketToClientId: { socketId: clientId }
 let players = {};
+let socketToClientId = {};
 let maxPlayers = null;       // 可遊玩人數，由主控輸入
 let round = 0;               // 0 表示還沒開始遊戲
 let winners = [];            // 本輪贏家的 playerId 陣列
@@ -26,31 +28,56 @@ let adminSocketId = null;    // 主控 socket id
 let history = [];            // 歷史紀錄
 
 io.on('connection', (socket) => {
-  console.log('New connection:', socket.id);
+  const clientId = socket.handshake?.auth?.clientId;
+  console.log('New connection:', socket.id, 'clientId:', clientId || '(none)');
 
-  // 是否可分配成玩家：
-  // 僅在「還沒開始第一輪」且已設定 maxPlayers 且未滿時，才分配玩家身分
-  if (round === 0 && maxPlayers !== null && getPlayerCount() < maxPlayers) {
-    const playerId = allocatePlayerId();
-    players[socket.id] = {
-      id: playerId,
-      name: `玩家 ${playerId}`,
-      hasName: false,
-      choice: null,
-      eliminated: false
-    };
+  // 若帶有 clientId，視為玩家端連線；否則當成一般觀眾 / 主控端
+  if (clientId) {
+    socketToClientId[socket.id] = clientId;
 
-    socket.emit('playerInfo', {
-      playerId,
-      name: players[socket.id].name,
-      minNumber: MIN_NUMBER,
-      maxNumber: MAX_NUMBER
-    });
+    let p = players[clientId];
 
-    console.log(`Assign player #${playerId} to ${socket.id}`);
+    if (p) {
+      // 斷線重連：沿用原本的玩家資料
+      p.connected = true;
+      console.log(`Reconnected player #${p.id} for clientId ${clientId}`);
+
+      socket.emit('playerInfo', {
+        playerId: p.id,
+        name: p.name,
+        minNumber: MIN_NUMBER,
+        maxNumber: MAX_NUMBER
+      });
+    } else {
+      // 新玩家：只有在遊戲尚未開始 (round === 0) 且有設定 maxPlayers 且尚未滿時才建立
+      if (round === 0 && maxPlayers !== null && getPlayerCount() < maxPlayers) {
+        const playerId = allocatePlayerId();
+        p = {
+          id: playerId,
+          name: `玩家 ${playerId}`,
+          hasName: false,
+          choice: null,
+          eliminated: false,
+          connected: true
+        };
+        players[clientId] = p;
+
+        console.log(`Assign player #${playerId} to clientId ${clientId} (socket ${socket.id})`);
+
+        socket.emit('playerInfo', {
+          playerId,
+          name: p.name,
+          minNumber: MIN_NUMBER,
+          maxNumber: MAX_NUMBER
+        });
+      } else {
+        console.log(`Client ${clientId} is spectator (round=${round}, maxPlayers=${maxPlayers})`);
+        socket.emit('spectator');
+      }
+    }
   } else {
+    // 沒帶 clientId，多半是主控頁面或旁觀者
     socket.emit('spectator');
-    console.log(`Socket ${socket.id} is spectator`);
   }
 
   sendState();
@@ -81,22 +108,28 @@ io.on('connection', (socket) => {
 
   // 玩家設定暱稱
   socket.on('setName', (name) => {
-    if (!players[socket.id]) return;
+    const clientId = socketToClientId[socket.id];
+    if (!clientId) return;
+    const p = players[clientId];
+    if (!p) return;
     if (typeof name !== 'string') return;
 
     const trimmed = name.trim();
     if (!trimmed) return;
 
-    players[socket.id].name = trimmed;
-    players[socket.id].hasName = true;
-    console.log(`Player ${players[socket.id].id} set name to "${trimmed}"`);
+    p.name = trimmed;
+    p.hasName = true;
+    console.log(`Player ${p.id} (clientId ${clientId}) set name to "${trimmed}"`);
     sendState();
   });
 
   // 玩家送出數字
   socket.on('chooseNumber', (number) => {
-    const p = players[socket.id];
-    if (!p) return;               // 不是玩家
+    const clientId = socketToClientId[socket.id];
+    if (!clientId) return;
+    const p = players[clientId];
+    if (!p) return;
+
     if (p.eliminated) return;     // 已淘汰
     if (gameLocked) return;       // 這輪已結算
     if (round === 0) return;      // 遊戲尚未開始
@@ -110,7 +143,7 @@ io.on('connection', (socket) => {
 
     sendState();
 
-    // 檢查：所有「尚未淘汰、已完成暱稱」的玩家都選好了嗎？
+    // 檢查：所有「尚未淘汰、目前在線、已完成暱稱」的玩家都選好了嗎？
     const activePlayers = getActivePlayers();
     const allChosen =
       activePlayers.length > 0 &&
@@ -144,15 +177,19 @@ io.on('connection', (socket) => {
   // 斷線
   socket.on('disconnect', () => {
     console.log('Disconnected:', socket.id);
-    if (players[socket.id]) {
-      const removedId = players[socket.id].id;
-      delete players[socket.id];
-      console.log(`Player ${removedId} removed`);
+
+    const clientId = socketToClientId[socket.id];
+    if (clientId && players[clientId]) {
+      players[clientId].connected = false;
+      console.log(`Player ${players[clientId].id} (clientId ${clientId}) marked disconnected`);
     }
+    delete socketToClientId[socket.id];
+
     if (socket.id === adminSocketId) {
       adminSocketId = null;
       console.log('Admin disconnected.');
     }
+
     sendState();
   });
 });
@@ -165,7 +202,7 @@ function settleRound() {
   gameLocked = true;
   choicesVisible = true;
 
-  const currentPlayers = getActivePlayers(); // 只看未淘汰的玩家
+  const currentPlayers = getActivePlayers(); // 只看未淘汰且在線的玩家
   const countByNumber = new Map();
 
   for (const p of currentPlayers) {
@@ -227,13 +264,12 @@ function settleRound() {
   sendState();
 }
 
-// 開始下一輪：只重置「未淘汰玩家」的 choice
+// 開始下一輪：只重置 choice
 function startNextRound() {
   if (maxPlayers === null) return; // 還沒設定人數就不能開始
 
-  // 第一輪：如果還沒開始過，round == 0 → round 變 1
   if (round === 0) {
-    round = 1;
+    round = 1; // 第一輪
   } else {
     round += 1;
   }
@@ -255,6 +291,7 @@ function startNextRound() {
 // 重置整個遊戲（清空玩家、紀錄，但保留 admin 登入狀態）
 function resetGame() {
   players = {};
+  socketToClientId = {};
   maxPlayers = null;
   round = 0;
   winners = [];
@@ -278,9 +315,10 @@ function sendState() {
       hasName: p.hasName,
       choice: p.choice,
       eliminated: p.eliminated
+      // 若未來想顯示在線狀態，可另外加 connected: p.connected
     }));
 
-  const activePlayers = playerList.filter(p => !p.eliminated);
+  const activePlayers = getActivePlayers();
   const roundActive = round > 0 && !gameLocked;
 
   io.emit('stateUpdate', {
@@ -296,14 +334,14 @@ function sendState() {
   });
 }
 
-// 工具：目前玩家數
+// 工具：目前玩家「席位」數（包含離線但尚未被重置者）
 function getPlayerCount() {
   return Object.keys(players).length;
 }
 
-// 工具：取得未淘汰玩家陣列
+// 工具：取得「未淘汰且在線」玩家陣列
 function getActivePlayers() {
-  return Object.values(players).filter(p => !p.eliminated);
+  return Object.values(players).filter(p => !p.eliminated && p.connected);
 }
 
 // 工具：分配玩家 id（1..maxPlayers 中尚未被用的）

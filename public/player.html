@@ -468,7 +468,25 @@
   </div>
 
   <script>
-    const socket = io();
+    // ==== 新增：產生固定的 clientId，存在 localStorage ====
+    const CLIENT_KEY = 'lowestUniqueClientId';
+    function getClientId() {
+      let id = localStorage.getItem(CLIENT_KEY);
+      if (!id) {
+        id = 'p-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem(CLIENT_KEY, id);
+      }
+      return id;
+    }
+
+    // 原本是 const socket = io();
+    // 改成帶 auth.clientId，讓 server 能認得是同一個玩家
+    const socket = io({
+      auth: {
+        clientId: getClientId()
+      }
+    });
+
     let playerId = null;
     let hasChosen = false;
     let minNumber = 1;
@@ -489,6 +507,8 @@
     const extraHint = document.getElementById('extraHint');
 
     const savedNick = localStorage.getItem(NICK_KEY);
+    console.log('savedNick', savedNick);
+    console.log('nicknameInput', nicknameInput);
     if (savedNick) {
       nicknameInput.value = savedNick;
     }
@@ -630,7 +650,7 @@
       }
     }
 
-    // ★ 這裡改成「先跳出確認視窗」★
+    // 保持你原本有確認視窗的版本
     function chooseNumber(n) {
       if (hasChosen) return;
       if (!hasName) {
@@ -647,9 +667,7 @@
       }
 
       const ok = confirm(`你確定要選擇數字「${n}」嗎？\n\n選定後本輪將無法更改。`);
-      if (!ok) {
-        return; // 玩家按取消，就不送出
-      }
+      if (!ok) return;
 
       socket.emit('chooseNumber', n);
       hasChosen = true;
