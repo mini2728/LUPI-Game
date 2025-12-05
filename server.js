@@ -176,6 +176,16 @@ io.on('connection', (socket) => {
     resetGame();
   });
 
+  // ⭐ 主控剔除玩家
+  socket.on('kickPlayer', (playerId) => {
+    if (socket.id !== adminSocketId) {
+      console.log('Non-admin tried to kick player:', socket.id);
+      return;
+    }
+    if (typeof playerId !== 'number') return;
+    kickPlayer(playerId);
+  });
+
   // 斷線
   socket.on('disconnect', () => {
     console.log('Disconnected:', socket.id);
@@ -316,6 +326,45 @@ function resetGame() {
   // 重新送一次狀態（此時大概只剩主控在聽）
   sendState();
 }
+
+// 主控剔除某位玩家
+function kickPlayer(playerId) {
+  let found = false;
+
+  for (const [clientId, p] of Object.entries(players)) {
+    if (p.id === playerId) {
+      found = true;
+
+      // 遊戲尚未開始：直接刪掉這個席位，讓別人可以補上
+      if (round === 0) {
+        console.log(`Kick player #${playerId} (before game start), remove seat`);
+        delete players[clientId];
+      } else {
+        // 遊戲已開始：標記為淘汰
+        console.log(`Kick player #${playerId} (in game), mark eliminated`);
+        p.eliminated = true;
+        p.choice = null;
+      }
+
+      // 把這個玩家目前的 socket 全部斷線
+      for (const [socketId, cid] of Object.entries(socketToClientId)) {
+        if (cid === clientId) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s) s.disconnect(true);
+          delete socketToClientId[socketId];
+        }
+      }
+    }
+  }
+
+  if (found) {
+    console.log(`Admin kicked player #${playerId}`);
+    sendState();
+  } else {
+    console.log(`kickPlayer: player #${playerId} not found`);
+  }
+}
+
 
 // 廣播目前狀態
 function sendState() {

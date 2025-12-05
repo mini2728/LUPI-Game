@@ -657,12 +657,13 @@
           <table>
             <thead>
               <tr>
-                <th width="10%">ID</th>
-                <th width="25%">暱稱</th>
-                <th width="15%">狀態</th>
-                <th width="15%">進度</th>
-                <th width="20%">已選數字</th>
-                <th width="15%" style="text-align: right;">本輪</th>
+                <th width="8%">ID</th>
+                <th width="24%">暱稱</th>
+                <th width="13%">狀態</th>
+                <th width="13%">進度</th>
+                <th width="18%">已選數字</th>
+                <th width="12%" style="text-align: right;">本輪</th>
+                <th width="12%" style="text-align: right;">操作</th>
               </tr>
             </thead>
             <tbody id="playerRows"></tbody>
@@ -869,31 +870,32 @@
         const tdProgress = document.createElement('td');
         const tdHist = document.createElement('td');
         const tdCurrent = document.createElement('td');
+        const tdAction = document.createElement('td');
 
         tdId.textContent = `#${p.id}`;
         
         const nameSpan = document.createElement('span');
         nameSpan.textContent = p.name || `玩家 ${p.id}`;
-        if(p.name) nameSpan.style.color = 'white';
+        if (p.name) nameSpan.style.color = 'white';
         tdName.appendChild(nameSpan);
 
         if (p.eliminated) {
-            tdStatus.innerHTML = '<span class="badge badge-danger">已淘汰</span>';
-            tr.classList.add('eliminated-row');
+          tdStatus.innerHTML = '<span class="badge badge-danger">已淘汰</span>';
+          tr.classList.add('eliminated-row');
         } else {
-            tdStatus.innerHTML = '<span class="badge badge-success">存活</span>';
+          tdStatus.innerHTML = '<span class="badge badge-success">存活</span>';
         }
 
         if (!p.hasName) {
-            tdProgress.innerHTML = '<span class="badge">無暱稱</span>';
+          tdProgress.innerHTML = '<span class="badge">無暱稱</span>';
         } else if (!p.eliminated) {
-            if (p.choice != null) {
-                tdProgress.innerHTML = '<span class="badge badge-success">已選</span>';
-            } else {
-                tdProgress.innerHTML = '<span class="badge badge-wait">思考中</span>';
-            }
+          if (p.choice != null) {
+            tdProgress.innerHTML = '<span class="badge badge-success">已選</span>';
+          } else {
+            tdProgress.innerHTML = '<span class="badge badge-wait">思考中</span>';
+          }
         } else {
-            tdProgress.textContent = '-';
+          tdProgress.textContent = '-';
         }
 
         if (choicesVisible && p.choice != null) {
@@ -918,12 +920,34 @@
           tr.classList.add('winner');
         }
 
+        // ⭐ 操作欄：主控專用剔除按鈕
+        tdAction.style.textAlign = 'right';
+        if (isAdmin && !p.eliminated) {
+          const kickBtn = document.createElement('button');
+          kickBtn.textContent = '剔除';
+          kickBtn.className = 'btn btn-danger';
+          kickBtn.style.padding = '4px 10px';
+          kickBtn.style.fontSize = '11px';
+          kickBtn.style.borderRadius = '999px';
+
+          kickBtn.addEventListener('click', () => {
+            const ok = confirm(`確定要剔除玩家「${p.name || '玩家 ' + p.id}」嗎？\n\n（遊戲開始後剔除 = 直接視為淘汰）`);
+            if (!ok) return;
+            socket.emit('kickPlayer', p.id);
+          });
+
+          tdAction.appendChild(kickBtn);
+        } else {
+          tdAction.textContent = '-';
+        }
+
         tr.appendChild(tdId);
         tr.appendChild(tdName);
         tr.appendChild(tdStatus);
         tr.appendChild(tdProgress);
         tr.appendChild(tdHist);
         tr.appendChild(tdCurrent);
+        tr.appendChild(tdAction);
         playerRows.appendChild(tr);
       });
 
