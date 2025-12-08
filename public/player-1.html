@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>最小唯一數遊戲 - 玩家</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --primary: #16a34a;       /* 聖誕綠 */
+      --primary-soft: #bbf7d0;
+      --accent: #ef4444;        /* 聖誕紅 */
+      --gold: #facc15;
+      --danger: #dc2626;
+      --success: #22c55e;
+      --bg: #020617;
+      --text-main: #f9fafb;
+      --text-sub: #9ca3af;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: calc(16px + env(safe-area-inset-top, 0))
+               16px
+               calc(20px + env(safe-area-inset-bottom, 0));
+      position: relative;
+      overflow: hidden;
+      /* 聖誕夜場景背景：上方星空、下方微微雪地＋聖誕紅綠暈開 */
+      background:
+        radial-gradient(circle at 10% -10%, rgba(248,250,252,0.18), transparent 60%),
+        radial-gradient(circle at 90% 0%, rgba(248,113,113,0.3), transparent 60%),
+        radial-gradient(circle at 10% 120%, rgba(52,211,153,0.28), transparent 60%),
+        linear-gradient(to top, #020617 0%, #020617 40%, #020617 100%);
+    }
+
+    /* 飄雪效果（整個畫面上層） */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,0.9), transparent),
+        radial-gradient(2px 2px at 30% 80%, rgba(255,255,255,0.8), transparent),
+        radial-gradient(2px 2px at 50% 10%, rgba(255,255,255,0.9), transparent),
+        radial-gradient(2px 2px at 70% 60%, rgba(255,255,255,0.85), transparent),
+        radial-gradient(2px 2px at 90% 30%, rgba(255,255,255,0.9), transparent);
+      background-size: 220px 260px;
+      opacity: 0.7;
+      animation: snow 18s linear infinite;
+      mix-blend-mode: screen;
+      z-index: 0;
+    }
+
+    @keyframes snow {
+      0%   { transform: translateY(-40px); }
+      100% { transform: translateY(40px); }
+    }
+
+    /* 場景：讓卡片中間，兩側有小裝飾 */
+    .scene {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      z-index: 1;
+    }
+
+    .xmas-side {
+      display: none;
+    }
+
+    @media (min-width: 640px) {
+      .xmas-side {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        font-size: 26px;
+        opacity: 0.9;
+      }
+      .xmas-side span {
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));
+      }
+    }
+
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background:
+        linear-gradient(155deg, rgba(15,23,42,0.98), rgba(15,23,42,0.92)),
+        url("data:image/svg+xml,%3Csvg width='160' height='160' viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='10' cy='20' r='1.2' fill='%23ffffff22'/%3E%3Ccircle cx='120' cy='40' r='0.9' fill='%23ffffff33'/%3E%3Ccircle cx='80' cy='120' r='1.1' fill='%23ffffff22'/%3E%3Ccircle cx='30' cy='90' r='0.9' fill='%23ffffff22'/%3E%3Ccircle cx='140' cy='130' r='1.2' fill='%23ffffff33'/%3E%3C/svg%3E");
+      background-blend-mode: overlay;
+      border-radius: 24px;
+      padding: 18px 16px 16px;
+      box-shadow:
+        0 18px 40px rgba(0,0,0,0.8),
+        0 0 0 1px rgba(148,163,184,0.35);
+      border: 1px solid rgba(248,250,252,0.14);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 卡片上緣掛燈條 */
+    .card::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      right: -6px;
+      top: 0;
+      height: 22px;
+      background-image:
+        radial-gradient(circle at 10% 40%, #f97373 0, #f97373 4px, transparent 4px),
+        radial-gradient(circle at 30% 40%, #facc15 0, #facc15 4px, transparent 4px),
+        radial-gradient(circle at 50% 40%, #4ade80 0, #4ade80 4px, transparent 4px),
+        radial-gradient(circle at 70% 40%, #38bdf8 0, #38bdf8 4px, transparent 4px),
+        radial-gradient(circle at 90% 40%, #fb7185 0, #fb7185 4px, transparent 4px);
+      background-size: 80px 24px;
+      background-repeat: repeat-x;
+      filter: drop-shadow(0 3px 4px rgba(0,0,0,0.7));
+    }
+
+    /* 右上花圈 */
+    .card::after {
+      content: "🎄";
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      font-size: 26px;
+      opacity: 0.9;
+      text-shadow: 0 3px 6px rgba(0,0,0,0.8);
+    }
+
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.06em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    h1 span.icon {
+      font-size: 24px;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.7));
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+
+    .subtitle strong {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      background: linear-gradient(135deg, rgba(30,64,175,0.96), rgba(15,23,42,0.96));
+      border: 1px solid rgba(191,219,254,0.7);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.9);
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 10px rgba(34,197,94,0.8);
+    }
+
+    .round-pill {
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: radial-gradient(circle at top, rgba(248,250,252,0.1), rgba(30,64,175,0.9));
+      border: 1px solid rgba(191,219,254,0.8);
+      color: #e0f2fe;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .round-pill::before {
+      content: "🎁";
+      font-size: 13px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      margin: 10px 0 4px;
+      color: var(--text-sub);
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .section-title::before {
+      content: "🧑‍🎄";
+      font-size: 14px;
+    }
+
+    #nameForm {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 9px 11px;
+      font-size: 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      background: radial-gradient(circle at top, rgba(248,250,252,0.04), rgba(15,23,42,0.98));
+      color: var(--text-main);
+      outline: none;
+    }
+    input[type="text"]::placeholder {
+      color: #6b7280;
+      font-size: 13px;
+    }
+    input[type="text"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(34,197,94,0.55);
+    }
+
+    button {
+      padding: 9px 14px;
+      font-size: 14px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, #16a34a, #22c55e);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(22,163,74,0.6);
+      transition: transform 0.12s ease-out, box-shadow 0.12s ease-out, filter 0.12s ease-out;
+    }
+    button:active:not(:disabled) {
+      transform: translateY(1px);
+      box-shadow: 0 2px 6px rgba(15,23,42,0.8);
+    }
+    button:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    #roundInfo {
+      font-size: 13px;
+      margin-top: 4px;
+      margin-bottom: 2px;
+      color: var(--text-sub);
+      text-align: left;
+    }
+
+    #status {
+      margin-top: 4px;
+      min-height: 38px;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    #status strong {
+      color: var(--gold);
+    }
+
+    .number-grid {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 480px) {
+      .number-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+    @media (min-width: 481px) {
+      .number-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    /* 數字按鈕改成「聖誕球」風格 */
+    .num-btn {
+      padding: 16px 0;
+      font-size: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.7);
+      background:
+        radial-gradient(circle at 30% 0%, rgba(255,255,255,0.32), transparent 50%),
+        radial-gradient(circle at 50% 120%, rgba(22,163,74,0.65), rgba(15,23,42,1));
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.12s ease-out;
+      position: relative;
+      overflow: hidden;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .num-btn::before {
+      /* 小金屬掛勾 */
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      width: 12px;
+      height: 6px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: linear-gradient(to right, #facc15, #fbbf24);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    }
+    .num-btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 10% 0%, rgba(248,250,252,0.35), transparent 55%);
+      opacity: 0;
+      transition: opacity 0.12s ease-out;
+    }
+    .num-btn:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 6px 14px rgba(15,23,42,0.9);
+      border-color: var(--gold);
+    }
+    .num-btn:hover:not(:disabled)::after {
+      opacity: 1;
+    }
+    .num-btn:disabled {
+      opacity: 0.28;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .notice {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 9px;
+      text-align: left;
+      line-height: 1.45;
+    }
+
+    .danger-text {
+      color: #fb7185;
+      font-weight: 500;
+    }
+
+    .success-text {
+      color: #4ade80;
+      font-weight: 500;
+    }
+
+    /* 底部鋪一點雪邊＋禮物 */
+    .card-footer-decor {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(148,163,184,0.5);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    .card-footer-decor .gifts {
+      display: flex;
+      gap: 4px;
+      font-size: 16px;
+    }
+
+    @media (max-width: 360px) {
+      h1 { font-size: 20px; }
+      .subtitle { font-size: 11px; }
+      #status { font-size: 12px; }
+      .number-grid { gap: 6px; }
+      .num-btn { font-size: 16px; padding: 14px 0; }
+      .card-footer-decor { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <div class="xmas-side xmas-left">
+      <span>🎅</span>
+      <span>🎁</span>
+    </div>
+
+    <div class="card">
+      <div class="top-row">
+        <div>
+          <div class="badge">
+            <span class="badge-dot"></span>
+            <span id="playerInfo">連線中...</span>
+          </div>
+          <h1><span class="icon">🎅</span>最小唯一數</h1>
+          <div class="subtitle">
+            聖誕派對小遊戲：<strong>每輪選一個數字</strong>，<br>
+            選到「最小且只有你選」的數字就贏了！
+          </div>
+        </div>
+        <div class="round-pill" id="roundPill">等待開始</div>
+      </div>
+
+      <div class="section-title">暱稱設定</div>
+      <div id="nameForm">
+        <input type="text" id="nickname" placeholder="輸入你的暱稱（主持人會看到）" />
+        <button id="btnSetName">送出</button>
+      </div>
+
+      <div id="roundInfo"></div>
+      <div id="status"></div>
+
+      <div id="gridContainer" class="number-grid"></div>
+      <div class="notice" id="extraHint"></div>
+
+      <div class="card-footer-decor">
+        <span>小撇步：等主持人口令再出手，更有派對氣氛 ✨</span>
+        <div class="gifts">
+          <span>🎄</span>
+          <span>🎁</span>
+          <span>⭐</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="xmas-side xmas-right">
+      <span>🦌</span>
+      <span>🎄</span>
+    </div>
+  </div>
+
+  <script>
+    // ==== 新增：產生固定的 clientId，存在 localStorage ====
+    const CLIENT_KEY = 'lowestUniqueClientId';
+    function getClientId() {
+      let id = localStorage.getItem(CLIENT_KEY);
+      if (!id) {
+        id = 'p-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem(CLIENT_KEY, id);
+      }
+      return id;
+    }
+
+    // 原本是 const socket = io();
+    // 改成帶 auth.clientId，讓 server 能認得是同一個玩家
+    const socket = io({
+      auth: {
+        clientId: getClientId()
+      }
+    });
+
+    let playerId = null;
+    let hasChosen = false;
+    let minNumber = 1;
+    let maxNumber = 32;
+    let hasName = false;
+    let eliminated = false;
+    let lastState = null;
+    const NICK_KEY = 'lowestUniqueNickname';
+
+    const playerInfoDiv = document.getElementById('playerInfo');
+    const roundInfoDiv = document.getElementById('roundInfo');
+    const roundPill = document.getElementById('roundPill');
+    const statusDiv = document.getElementById('status');
+    const gridContainer = document.getElementById('gridContainer');
+    const nameFormDiv = document.getElementById('nameForm');
+    const nicknameInput = document.getElementById('nickname');
+    const btnSetName = document.getElementById('btnSetName');
+    const extraHint = document.getElementById('extraHint');
+
+    const savedNick = localStorage.getItem(NICK_KEY);
+    console.log('savedNick', savedNick);
+    console.log('nicknameInput', nicknameInput);
+    if (savedNick) {
+      nicknameInput.value = savedNick;
+    }
+
+    socket.on('playerInfo', (info) => {
+      playerId = info.playerId;
+      minNumber = info.minNumber;
+      maxNumber = info.maxNumber;
+
+      playerInfoDiv.textContent = `你是 ${info.name}`;
+      if (!nicknameInput.value) {
+        nicknameInput.value = info.name;
+      }
+
+      buildButtons();
+      refreshButtonsEnabled();
+
+      if (savedNick) {
+        socket.emit('setName', savedNick);
+        hasName = true;
+        statusDiv.textContent = '已套用儲存的暱稱，等待主持人開始遊戲。';
+        extraHint.textContent = '請留在此畫面，依照主持人口令在每輪中選擇數字。';
+        refreshButtonsEnabled();
+      }
+    });
+
+    socket.on('spectator', () => {
+      playerInfoDiv.textContent = '目前無法加入遊戲，你是旁觀者。';
+      statusDiv.textContent = '若主持人重置遊戲，你可以重新整理頁面嘗試加入。';
+      roundPill.textContent = '旁觀中';
+      gridContainer.innerHTML = '';
+      nameFormDiv.style.display = 'none';
+    });
+
+    socket.on('stateUpdate', (state) => {
+      lastState = state;
+
+      if (state.round > 0) {
+        roundInfoDiv.textContent = `目前第 ${state.round} 輪`;
+        roundPill.textContent = `第 ${state.round} 輪`;
+      } else {
+        if (state.maxPlayers != null) {
+          roundInfoDiv.textContent =
+            `遊戲尚未開始，預計玩家數 ${state.maxPlayers} 人，已加入 ${state.joinedCount} 人`;
+        } else {
+          roundInfoDiv.textContent = '遊戲尚未開始，請等待主持人設定可遊玩人數。';
+        }
+        roundPill.textContent = '等待開始';
+      }
+
+      if (playerId != null) {
+        const me = state.players.find(p => p.id === playerId);
+        if (me) {
+          playerInfoDiv.textContent = `你是 ${me.name}`;
+          hasName = !!me.hasName;
+          eliminated = !!me.eliminated;
+
+          if (eliminated) {
+            statusDiv.innerHTML = '<span class="success-text">你曾經獲勝並已淘汰出局</span>，接下來可以安心當觀眾 🎉';
+            extraHint.textContent = '你可以繼續留在畫面上，看其他人比到最後。';
+          } else if (me.choice != null) {
+            hasChosen = true;
+            if (state.choicesVisible) {
+              statusDiv.innerHTML = `本輪你選的數字是 <strong>${me.choice}</strong>`;
+            } else {
+              statusDiv.textContent = '你本輪已選擇，請等待所有人選完與結果公布。';
+            }
+            extraHint.textContent = '';
+          } else {
+            hasChosen = false;
+            if (!hasName) {
+              statusDiv.textContent = '請先輸入暱稱並送出，才能參加遊戲。';
+              extraHint.textContent = '';
+            } else if (state.round === 0) {
+              statusDiv.textContent = '暱稱已設定完成，等待主持人開始第一輪。';
+              extraHint.textContent = '主持人宣布開始後，會開放選擇數字。';
+            } else if (!state.roundActive) {
+              statusDiv.textContent = '本輪尚未開始或已結束，請等待主持人開始下一輪。';
+              extraHint.textContent = '';
+            } else {
+              statusDiv.textContent = '請在下面選擇一個數字。';
+              extraHint.textContent = '選完後不能更改，直到下一輪開始。';
+            }
+          }
+        }
+      }
+
+      refreshButtonsEnabled();
+    });
+
+    socket.on('roundResult', (result) => {
+      if (playerId != null && result.winners && result.winners.includes(playerId)) {
+        statusDiv.innerHTML = `🎉 你以數字 <strong>${result.lowestUnique}</strong> 獲勝並淘汰出局！（第 ${result.round} 輪）`;
+        extraHint.textContent = '接下來你將以觀眾身分觀看遊戲。';
+      }
+      refreshButtonsEnabled();
+    });
+
+    socket.on('newRound', (data) => {
+      if (playerId != null && !eliminated) {
+        statusDiv.textContent = `第 ${data.round} 輪開始，請在畫面下方選擇數字。`;
+        extraHint.textContent = '等主持人倒數或口令，再出手會更有趣 😉';
+        hasChosen = false;
+        refreshButtonsEnabled();
+      }
+    });
+
+    socket.on('gameReset', () => {
+      statusDiv.innerHTML = '<span class="danger-text">遊戲已被主持人重置，請重新整理頁面重新加入新的一場。</span>';
+      extraHint.textContent = '';
+      gridContainer.innerHTML = '';
+      btnSetName.disabled = true;
+      roundPill.textContent = '已重置';
+    });
+
+    btnSetName.addEventListener('click', () => {
+      const name = nicknameInput.value.trim();
+      if (!name) {
+        alert('暱稱不能是空的');
+        return;
+      }
+      socket.emit('setName', name);
+      hasName = true;
+      localStorage.setItem(NICK_KEY, name);
+      statusDiv.textContent = '暱稱已送出，可以等待主持人開始或進入下一輪。';
+      extraHint.textContent = '之後重新整理頁面也會自動帶入這個暱稱。';
+      refreshButtonsEnabled();
+    });
+
+    function buildButtons() {
+      gridContainer.innerHTML = '';
+      for (let n = minNumber; n <= maxNumber; n++) {
+        const btn = document.createElement('button');
+        btn.className = 'num-btn';
+        btn.textContent = n;
+        btn.dataset.value = n;
+        btn.addEventListener('click', () => chooseNumber(n));
+        gridContainer.appendChild(btn);
+      }
+    }
+
+    // 保持你原本有確認視窗的版本
+    function chooseNumber(n) {
+      if (hasChosen) return;
+      if (!hasName) {
+        alert('請先輸入暱稱再選數字。');
+        return;
+      }
+      if (eliminated) {
+        alert('你已經被淘汰，無法再選數字。');
+        return;
+      }
+      if (!lastState || !lastState.roundActive) {
+        alert('本輪尚未開始或已結束，請等待主持人。');
+        return;
+      }
+
+      const ok = confirm(`你確定要選擇數字「${n}」嗎？\n\n選定後本輪將無法更改。`);
+      if (!ok) return;
+
+      socket.emit('chooseNumber', n);
+      hasChosen = true;
+      refreshButtonsEnabled();
+    }
+
+    function refreshButtonsEnabled() {
+      const buttons = Array.from(gridContainer.querySelectorAll('button'));
+      let disabled = false;
+
+      if (!hasName) disabled = true;
+      if (hasChosen) disabled = true;
+      if (eliminated) disabled = true;
+      if (!lastState || !lastState.roundActive) disabled = true;
+
+      buttons.forEach(b => b.disabled = disabled);
+    }
+  </script>
+</body>
+</html>

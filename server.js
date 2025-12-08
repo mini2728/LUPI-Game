@@ -9,7 +9,7 @@ const io = new Server(server);
 
 const PORT = 3000;
 const MIN_NUMBER = 1;
-const MAX_NUMBER = 32;
+const MAX_NUMBER = 30;
 const ADMIN_PASSWORD = '53206993'; // 主控密碼，可改
 
 app.use(express.static('public'));
@@ -251,7 +251,7 @@ function settleRound() {
       p.eliminated = true;
     }
 
-    msg = `第 ${round} 輪：數字 ${lowestUnique} 為最小唯一，由 ${winnerNames.join(', ')} 獲勝並淘汰出局！`;
+    msg = `第 ${round} 輪：數字 ${lowestUnique} 為最小唯一，由 ${winnerNames.join(', ')} 獲勝！`;
     console.log(msg);
   }
 
