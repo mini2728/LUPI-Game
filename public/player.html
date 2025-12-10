@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>最小唯一數 - 關卡風格</title>
+  <title>最小唯一數 - 風格</title>
   <!-- Viewport 設定 -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <script src="/socket.io/socket.io.js"></script>
@@ -29,6 +29,12 @@
 
       --accent-yellow: #fbc02d;  /* 黃色按鈕/裝飾 */
       --accent-orange: #f57f17;  /* 深橘陰影 */
+      
+      --accent-red: #ef5350;     /* 紅色按鈕 */
+      --accent-red-shadow: #c62828;
+      
+      --accent-green: #66bb6a;   /* 綠色按鈕 */
+      --accent-green-shadow: #2e7d32;
 
       --text-stroke: #5d4037;    /* 文字深色描邊 */
     }
@@ -248,7 +254,7 @@
       padding-bottom: 10px;
     }
 
-    /* === 關卡方塊按鈕 === */
+    /* === 方塊按鈕 === */
     .num-btn {
       aspect-ratio: 1;
       background: var(--btn-base);
@@ -339,6 +345,100 @@
     .nav-arrow.left { left: -15px; }
     .nav-arrow.right { right: -15px; background: var(--accent-yellow); color: white; box-shadow: 0 3px 0 var(--accent-orange); }
 
+    /* === 自定義模態彈窗 (Custom Modal) === */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      display: none; /* JS 控制顯示 */
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-box {
+      background: var(--panel-bg);
+      border: 6px solid var(--panel-border);
+      border-radius: 24px;
+      padding: 24px;
+      width: 90%;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      position: relative;
+    }
+
+    .modal-box::before {
+      content: '⭐';
+      position: absolute;
+      top: -25px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 40px;
+      filter: drop-shadow(0 4px 2px rgba(0,0,0,0.2));
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.5); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-title {
+      font-family: 'Titan One', cursive;
+      font-size: 24px;
+      color: #5d4037;
+      margin: 10px 0;
+    }
+
+    .modal-text {
+      font-size: 16px;
+      color: #8d6e63;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+    .modal-num {
+      color: var(--accent-orange);
+      font-size: 22px;
+      font-weight: 900;
+      margin: 0 4px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    /* 模態框按鈕 */
+    .modal-btn {
+      flex: 1;
+      border: none;
+      border-radius: 12px;
+      padding: 12px;
+      font-family: 'Titan One', cursive;
+      font-size: 16px;
+      color: white;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.1s;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.4), 0 5px 0 rgba(0,0,0,0.2);
+    }
+    .modal-btn:active {
+      transform: translateY(4px);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.4), 0 0 0 rgba(0,0,0,0.2);
+    }
+
+    .btn-confirm {
+      background: var(--accent-green);
+      box-shadow: 0 5px 0 var(--accent-green-shadow);
+    }
+    .btn-cancel {
+      background: var(--accent-red);
+      box-shadow: 0 5px 0 var(--accent-red-shadow);
+    }
+
   </style>
 </head>
 <body>
@@ -379,6 +479,22 @@
 
   </div>
 
+  <!-- 自定義確認彈窗 (Custom Modal) -->
+  <div id="customModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">確認選擇</div>
+      <div class="modal-text">
+        您要選擇
+        <span id="modalNum" class="modal-num"></span> 嗎？
+        <br><span style="font-size:12px; opacity:0.8">(選定後無法更改)</span>
+      </div>
+      <div class="modal-actions">
+        <button id="btnModalCancel" class="modal-btn btn-cancel">返回</button>
+        <button id="btnModalConfirm" class="modal-btn btn-confirm">確定!</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ==== 邏輯保持不變 ====
     const CLIENT_KEY = 'lowestUniqueClientId';
@@ -407,13 +523,21 @@
     const NICK_KEY = 'lowestUniqueNickname';
 
     const playerInfoDiv = document.getElementById('playerInfo');
-    const roundPill = document.getElementById('roundPill'); // 原 roundInfoDiv 改用此顯示
+    const roundPill = document.getElementById('roundPill');
     const statusDiv = document.getElementById('status');
     const gridContainer = document.getElementById('gridContainer');
     const nameFormDiv = document.getElementById('nameForm');
     const nicknameInput = document.getElementById('nickname');
     const btnSetName = document.getElementById('btnSetName');
     const extraHint = document.getElementById('extraHint');
+
+    // Modal Elements
+    const customModal = document.getElementById('customModal');
+    const modalNumSpan = document.getElementById('modalNum');
+    const btnModalConfirm = document.getElementById('btnModalConfirm');
+    const btnModalCancel = document.getElementById('btnModalCancel');
+    
+    let pendingChoice = null; // 暫存使用者想選的數字
 
     const savedNick = localStorage.getItem(NICK_KEY);
     if (savedNick) {
@@ -482,7 +606,6 @@
             
           } else if (me.choice != null) {
             hasChosen = true;
-            // Visual feedback
             highlightButton(me.choice);
 
             if (state.choicesVisible) {
@@ -493,7 +616,6 @@
             extraHint.textContent = '';
           } else {
             hasChosen = false;
-            // Clear highlights
             document.querySelectorAll('.num-btn').forEach(b => b.classList.remove('selected'));
 
             if (!hasName) {
@@ -505,14 +627,14 @@
               statusDiv.textContent = '回合結束 / 暫停';
               extraHint.textContent = 'Wait...';
             } else {
-              statusDiv.textContent = '請選擇一個關卡(數字)!';
+              statusDiv.textContent = '請選擇一個數字!';
               extraHint.textContent = 'Choose your number';
             }
           }
         }
       }
-
       refreshButtonsEnabled();
+      closeModal(); // 狀態更新時關閉彈窗，避免過時
     });
 
     socket.on('roundResult', (result) => {
@@ -536,13 +658,14 @@
       extraHint.textContent = 'Reloading...';
       gridContainer.innerHTML = '';
       btnSetName.disabled = true;
+      closeModal();
       setTimeout(() => location.reload(), 2000);
     });
 
     btnSetName.addEventListener('click', () => {
       const name = nicknameInput.value.trim();
       if (!name) {
-        alert('暱稱不能是空的');
+        alert('暱稱不能是空的'); // 簡單提示保留 alert 即可
         return;
       }
       socket.emit('setName', name);
@@ -556,15 +679,17 @@
       gridContainer.innerHTML = '';
       for (let n = minNumber; n <= maxNumber; n++) {
         const btn = document.createElement('button');
-        btn.className = 'num-btn'; // 對應 CSS
+        btn.className = 'num-btn';
         btn.textContent = n;
         btn.dataset.value = n;
-        btn.addEventListener('click', () => chooseNumber(n));
+        btn.addEventListener('click', () => promptChoice(n)); // 改呼叫 promptChoice
         gridContainer.appendChild(btn);
       }
     }
 
-    function chooseNumber(n) {
+    // ==== 替換原本的 chooseNumber 流程，改用 Modal ====
+
+    function promptChoice(n) {
       if (hasChosen) return;
       if (!hasName) {
         alert('請先輸入名字');
@@ -580,13 +705,28 @@
         return;
       }
 
-      const ok = confirm(`選擇關卡 ${n} ？\n(選定後無法更改)`);
-      if (!ok) return;
+      // 顯示自定義彈窗
+      pendingChoice = n;
+      modalNumSpan.textContent = n;
+      customModal.style.display = 'flex';
+    }
 
-      socket.emit('chooseNumber', n);
-      hasChosen = true;
-      highlightButton(n);
-      refreshButtonsEnabled();
+    // 模態窗按鈕事件
+    btnModalCancel.addEventListener('click', closeModal);
+    
+    btnModalConfirm.addEventListener('click', () => {
+      if (pendingChoice !== null) {
+        socket.emit('chooseNumber', pendingChoice);
+        hasChosen = true;
+        highlightButton(pendingChoice);
+        refreshButtonsEnabled();
+      }
+      closeModal();
+    });
+
+    function closeModal() {
+      customModal.style.display = 'none';
+      pendingChoice = null;
     }
 
     function highlightButton(n) {
